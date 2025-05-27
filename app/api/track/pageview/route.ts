@@ -3,6 +3,7 @@ import { sendPageViewEvent } from '@/lib/fbevents'; // Assuming fbevents.ts is i
 import type { UserData } from '@/lib/fbevents'; // Import UserData type
 
 export async function POST(request: NextRequest) {
+  console.log("!!!! PAGEVIEW POST HANDLER INVOKED !!!!"); // Log de diagnóstico inicial
   const timestamp = new Date().toISOString();
   let eventId = 'N/A'; // Initialize eventId for logging
 
@@ -15,53 +16,24 @@ export async function POST(request: NextRequest) {
     const { userDataFromClient, eventSourceUrl, urlParameters } = body;
 
     const clientIp = request.headers.get('x-forwarded-for') || request.ip;
-    console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Client IP: ${clientIp || 'Not found'}`);
-
-    let geoData = null;
-    if (clientIp) {
-      console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Sending IP to geolocation service`);
-      // Simulate geolocation call - replace with actual call
-      // const geoResponse = await fetch(`https://ipapi.co/${clientIp}/json/`);
-      // geoData = await geoResponse.json();
-      // console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Geolocation response:`, JSON.stringify(geoData, null, 2));
-      // For now, let's use a placeholder as the geolocation service is not yet implemented
-      geoData = { city: 'Placeholder City', region: 'Placeholder Region', country_name: 'Placeholder Country', postal: '00000-000' };
-      console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Geolocation response (placeholder):`, JSON.stringify(geoData, null, 2));
-    } else {
-      console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] IP not found, skipping geolocation`);
-    }
+    // Log for IP is still useful here, as fbevents will use it.
+    console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Client IP for fbevents: ${clientIp || 'Not found'}`);
 
     const fbcFromCookieServer = request.cookies.get('_fbc')?.value;
     const fbpFromCookieServer = request.cookies.get('_fbp')?.value;
 
+    // UserData will be enhanced with IP, User-Agent, and actual geo data (if IPDATA_API_KEY is set) by sendServerEvent in lib/fbevents.ts
     const userData: Partial<UserData> = {
       ...userDataFromClient,
-      client_ip_address: clientIp || undefined, // Add IP address
-      // ...(geoData && { // Add geolocation data if available - this will be uncommented when actual geo service is integrated
-      //   client_user_agent: request.headers.get('user-agent') || undefined,
-      //   ge: { // Assuming 'ge' is the correct field for geolocation in your UserData type
-      //     ct: geoData.city,
-      //     st: geoData.region,
-      //     country: geoData.country_name,
-      //   }
-      // }),
-      fbc: fbcFromCookieServer && (!userDataFromClient?.fbc || userDataFromClient.fbc !== fbcFromCookieServer) 
-           ? fbcFromCookieServer 
+      // client_ip_address and client_user_agent are set by sendServerEvent
+      // Geolocation fields (ct, st, zp, country) are also set by sendServerEvent via getGeolocationData
+      fbc: fbcFromCookieServer && (!userDataFromClient?.fbc || userDataFromClient.fbc !== fbcFromCookieServer)
+           ? fbcFromCookieServer
            : userDataFromClient?.fbc,
-      fbp: fbpFromCookieServer && (!userDataFromClient?.fbp || userDataFromClient.fbp !== fbpFromCookieServer) 
-           ? fbpFromCookieServer 
+      fbp: fbpFromCookieServer && (!userDataFromClient?.fbp || userDataFromClient.fbp !== fbpFromCookieServer)
+           ? fbpFromCookieServer
            : userDataFromClient?.fbp,
     };
-    
-    // Add geolocation data if available and update userData - this part will be fully active with actual geo service
-    if (geoData) {
-        (userData as UserData).ct = [geoData.city]; // Hashed automatically later
-        (userData as UserData).st = [geoData.region]; // Hashed automatically later
-        (userData as UserData).country = [geoData.country_name]; // Hashed automatically later
-        (userData as UserData).zp = [geoData.postal]; // Added postal/zip code
-        console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Added geolocation data to UserData:`, JSON.stringify({ city: geoData.city, region: geoData.region, country: geoData.country_name, postal: geoData.postal }, null, 2));
-    }
-
 
     // console.log('[API /pageview_DEBUG] Received request body:', JSON.stringify(body, null, 2));
 
@@ -81,39 +53,39 @@ export async function POST(request: NextRequest) {
       console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] No _fbp found from client or server cookie.`);
     }
 
-    const customData = {}; 
+    const customData = {};
 
-    console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] UserData to be sent (before hashing by sendPageViewEvent):`, JSON.stringify(userData, null, 2));
-    console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Sending event to Facebook Conversions API`);
+    console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] UserData being passed to sendPageViewEvent (will be enhanced by it):`, JSON.stringify(userData, null, 2));
+    console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Sending event to Facebook Conversions API via sendPageViewEvent`);
 
     const result = await sendPageViewEvent(
-      request,      
-      userData as UserData, // Cast para UserData completo após preenchimento   
-      customData,   
-      eventSourceUrl, 
-      eventId,      
-      urlParameters 
+      request,
+      userData as UserData, // Cast to UserData; sendServerEvent handles missing fields.
+      customData,
+      eventSourceUrl,
+      eventId,
+      urlParameters
     );
-    
+
     console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Facebook Conversions API response:`, JSON.stringify(result, null, 2));
 
     // console.log(`[API /pageview_DEBUG] Result from sendPageViewEvent for Event ID ${eventId}:`, result);
 
     if (result && result.success) {
       console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Event processed successfully. fbtrace_id: ${result.fbtrace_id}`);
-      return NextResponse.json({ 
-        message: 'PageView event processed successfully', 
-        fbtrace_id: result.fbtrace_id, 
+      return NextResponse.json({
+        message: 'PageView event processed successfully',
+        fbtrace_id: result.fbtrace_id,
         event_id: eventId,
-        success: true 
+        success: true
       });
     } else {
       console.error(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Error processing event:`, result?.error || result?.warning || 'Unknown error');
-      return NextResponse.json({ 
-        message: 'Error processing PageView event', 
-        error: result?.error || result?.warning || 'Unknown error', 
+      return NextResponse.json({
+        message: 'Error processing PageView event',
+        error: result?.error || result?.warning || 'Unknown error',
         event_id: eventId,
-        success: false 
+        success: false
       }, { status: 500 });
     }
   } catch (error) {

@@ -15,28 +15,13 @@ export async function POST(request: NextRequest) {
     const { userDataFromClient, customData, eventSourceUrl, urlParameters } = body;
 
     const clientIp = request.headers.get('x-forwarded-for') || request.ip;
-    console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Client IP: ${clientIp || 'Not found'}`);
-
-    let geoData = null;
-    if (clientIp) {
-      console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Sending IP to geolocation service`);
-      // Simulate geolocation call - replace with actual call
-      // const geoResponse = await fetch(`https://ipapi.co/${clientIp}/json/`);
-      // geoData = await geoResponse.json();
-      // console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Geolocation response:`, JSON.stringify(geoData, null, 2));
-      // For now, let's use a placeholder
-      geoData = { city: 'Placeholder City', region: 'Placeholder Region', country_name: 'Placeholder Country', postal: '00000-000' };
-      console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Geolocation response (placeholder):`, JSON.stringify(geoData, null, 2));
-    } else {
-      console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] IP not found, skipping geolocation`);
-    }
+    console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Client IP for fbevents: ${clientIp || 'Not found'}`);
 
     const fbcFromCookieServer = request.cookies.get('_fbc')?.value;
     const fbpFromCookieServer = request.cookies.get('_fbp')?.value;
 
     const userData: Partial<UserData> = {
       ...userDataFromClient,
-      client_ip_address: clientIp || undefined,
       fbc: fbcFromCookieServer && (!userDataFromClient?.fbc || userDataFromClient.fbc !== fbcFromCookieServer) 
            ? fbcFromCookieServer 
            : userDataFromClient?.fbc,
@@ -45,24 +30,14 @@ export async function POST(request: NextRequest) {
            : userDataFromClient?.fbp,
     };
 
-    if (geoData) {
-        (userData as UserData).ct = [geoData.city];
-        (userData as UserData).st = [geoData.region];
-        (userData as UserData).country = [geoData.country_name];
-        (userData as UserData).zp = [geoData.postal];
-        console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Added geolocation data to UserData:`, JSON.stringify({ city: geoData.city, region: geoData.region, country: geoData.country_name, postal: geoData.postal }, null, 2));
-    }
-    
-    // console.log('[API /viewcontent] Received request body:', JSON.stringify(body, null, 2)); // Commented out verbose log
-
     if (!customData || !customData.content_name) {
       console.warn(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Missing required customData fields (content_name). Request body:`, JSON.stringify(customData, null, 2));
       return NextResponse.json({ message: 'Missing required customData fields for ViewContent.' }, { status: 400 });
     }
 
-    console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] UserData to be sent (before hashing by sendViewContentEvent):`, JSON.stringify(userData, null, 2));
+    console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] UserData being passed to sendViewContentEvent (will be enhanced by it):`, JSON.stringify(userData, null, 2));
     console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] CustomData to be sent:`, JSON.stringify(customData, null, 2));
-    console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Sending event to Facebook Conversions API`);
+    console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Sending event to Facebook Conversions API via sendViewContentEvent`);
 
     const result = await sendViewContentEvent(
       request,
@@ -74,7 +49,7 @@ export async function POST(request: NextRequest) {
     );
 
     console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Facebook Conversions API response:`, JSON.stringify(result, null, 2));
-    // console.log(`[API /viewcontent] Result from sendViewContentEvent for Event ID ${eventId}:`, result); // Commented out verbose log
+    // console.log(`[API /viewcontent] Result from sendViewContentEvent for Event ID ${eventId}:`, result);
 
     if (result && result.success) {
       console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Event processed successfully. fbtrace_id: ${result.fbtrace_id}`);
