@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sendPageViewEvent } from '@/lib/fbevents'; // Assuming fbevents.ts is in src/lib
 import type { UserData } from '@/lib/fbevents'; // Import UserData type
 
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://dozeroa100k.com.br';
+const rawAllowedOrigin = process.env.ALLOWED_ORIGIN || 'https://dozeroa100k.com.br';
+const ALLOWED_ORIGIN = rawAllowedOrigin.endsWith('/') ? rawAllowedOrigin.slice(0, -1) : rawAllowedOrigin;
 
 function getCorsHeaders() {
   return {
