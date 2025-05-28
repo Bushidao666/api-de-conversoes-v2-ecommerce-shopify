@@ -2,10 +2,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sendPageViewEvent } from '@/lib/fbevents'; // Assuming fbevents.ts is in src/lib
 import type { UserData } from '@/lib/fbevents'; // Import UserData type
 
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://dozeroa100k.com.br';
+
+function getCorsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization', // Add any other headers your client might send
+  };
+}
+
+export async function OPTIONS(request: NextRequest) {
+  console.log(`[${new Date().toISOString()}] [PAGEVIEW_EVENT] [OPTIONS] Received preflight request from origin: ${request.headers.get('origin')}`);
+  const headers = getCorsHeaders();
+  return NextResponse.json({}, { status: 200, headers });
+}
+
 export async function POST(request: NextRequest) {
   console.log("!!!! PAGEVIEW POST HANDLER INVOKED !!!!"); // Log de diagnóstico inicial
   const timestamp = new Date().toISOString();
   let eventId = 'N/A'; // Initialize eventId for logging
+  const corsHeaders = getCorsHeaders();
 
   try {
     console.log(`[${timestamp}] [PAGEVIEW_EVENT] Received event from client`);
@@ -78,7 +95,7 @@ export async function POST(request: NextRequest) {
         fbtrace_id: result.fbtrace_id,
         event_id: eventId,
         success: true
-      });
+      }, { status: 200, headers: corsHeaders });
     } else {
       console.error(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Error processing event:`, result?.error || result?.warning || 'Unknown error');
       return NextResponse.json({
@@ -86,7 +103,7 @@ export async function POST(request: NextRequest) {
         error: result?.error || result?.warning || 'Unknown error',
         event_id: eventId,
         success: false
-      }, { status: 500 });
+      }, { status: 500, headers: corsHeaders });
     }
   } catch (error) {
     const errorTimestamp = new Date().toISOString(); // Use a new timestamp for the error log
@@ -95,6 +112,11 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error) {
         errorMessage = error.message;
     }
-    return NextResponse.json({ message: 'Error processing PageView event', error: errorMessage, event_id: eventId, success: false }, { status: 500 });
+    return NextResponse.json({
+        message: 'Error processing PageView event',
+        error: errorMessage,
+        event_id: eventId,
+        success: false
+    }, { status: 500, headers: corsHeaders });
   }
 } 

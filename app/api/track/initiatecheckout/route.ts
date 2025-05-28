@@ -2,14 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sendInitiateCheckoutEvent } from '@/lib/fbevents'; // Assuming fbevents.ts is in src/lib
 import type { UserData } from '@/lib/fbevents'; // Import UserData type
 
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://dozeroa100k.com.br';
+
+function getCorsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
+}
+
+export async function OPTIONS(request: NextRequest) {
+  console.log(`[${new Date().toISOString()}] [INITIATE_CHECKOUT_EVENT] [OPTIONS] Received preflight request from origin: ${request.headers.get('origin')}`);
+  const headers = getCorsHeaders();
+  return NextResponse.json({}, { status: 200, headers });
+}
+
 export async function POST(request: NextRequest) {
   const timestamp = new Date().toISOString();
-  let eventId = 'N/A'; // Initialize eventId for logging
+  let eventId = 'N/A';
+  const corsHeaders = getCorsHeaders();
 
   try {
     console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] Received event from client`);
     const body = await request.json();
-    eventId = body.eventId || eventId; // Update eventId if available in body
+    eventId = body.eventId || eventId;
     console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Payload:`, JSON.stringify(body, null, 2));
 
     const { userDataFromClient, customData, eventSourceUrl, urlParameters } = body;
@@ -32,7 +49,7 @@ export async function POST(request: NextRequest) {
 
     if (!customData || typeof customData.value === 'undefined' || !customData.currency) {
         console.warn(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Missing required customData fields (value, currency). Request body:`, JSON.stringify(customData, null, 2));
-        return NextResponse.json({ message: 'Missing required customData fields for InitiateCheckout (e.g., value, currency).' }, { status: 400 });
+        return NextResponse.json({ message: 'Missing required customData fields for InitiateCheckout (e.g., value, currency).' }, { status: 400, headers: corsHeaders });
     }
 
     console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] UserData being passed to sendInitiateCheckoutEvent (will be enhanced by it):`, JSON.stringify(userData, null, 2));
@@ -49,7 +66,6 @@ export async function POST(request: NextRequest) {
     );
 
     console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Facebook Conversions API response:`, JSON.stringify(result, null, 2));
-    // console.log(`[API /initiatecheckout] Result from sendInitiateCheckoutEvent for Event ID ${eventId}:`, result);
 
     if (result && result.success) {
       console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Event processed successfully. fbtrace_id: ${result.fbtrace_id}`);
@@ -58,7 +74,7 @@ export async function POST(request: NextRequest) {
         fbtrace_id: result.fbtrace_id, 
         event_id: eventId,
         success: true
-      });
+      }, { status: 200, headers: corsHeaders });
     } else {
       console.error(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Error processing event:`, result?.error || result?.warning || 'Unknown error');
       return NextResponse.json({ 
@@ -66,7 +82,7 @@ export async function POST(request: NextRequest) {
         error: result?.error || result?.warning || 'Unknown error', 
         event_id: eventId,
         success: false
-      }, { status: 500 });
+      }, { status: 500, headers: corsHeaders });
     }
   } catch (error) {
     const errorTimestamp = new Date().toISOString();
@@ -75,6 +91,11 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error) {
         errorMessage = error.message;
     }
-    return NextResponse.json({ message: 'Error processing InitiateCheckout event', error: errorMessage, event_id: eventId, success: false }, { status: 500 });
+    return NextResponse.json({ 
+        message: 'Error processing InitiateCheckout event', 
+        error: errorMessage, 
+        event_id: eventId, 
+        success: false 
+    }, { status: 500, headers: corsHeaders });
   }
 } 
