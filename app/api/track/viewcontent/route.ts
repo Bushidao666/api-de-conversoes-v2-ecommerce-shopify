@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     eventId = body.eventId || eventId;
     console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Payload:`, JSON.stringify(body, null, 2));
 
-    const { userDataFromClient, customData, eventSourceUrl, urlParameters } = body;
+    const { userData: clientProvidedUserData, customData, eventSourceUrl, urlParameters } = body;
 
     const clientIp = request.headers.get('x-forwarded-for') || request.ip;
     console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Client IP for fbevents: ${clientIp || 'Not found'}`);
@@ -38,14 +38,14 @@ export async function POST(request: NextRequest) {
     const fbcFromCookieServer = request.cookies.get('_fbc')?.value;
     const fbpFromCookieServer = request.cookies.get('_fbp')?.value;
 
-    const userData: Partial<UserData> = {
-      ...userDataFromClient,
-      fbc: fbcFromCookieServer && (!userDataFromClient?.fbc || userDataFromClient.fbc !== fbcFromCookieServer) 
+    const userDataForFbevents: Partial<UserData> = {
+      ...clientProvidedUserData,
+      fbc: fbcFromCookieServer && (!clientProvidedUserData?.fbc || clientProvidedUserData.fbc !== fbcFromCookieServer) 
            ? fbcFromCookieServer 
-           : userDataFromClient?.fbc,
-      fbp: fbpFromCookieServer && (!userDataFromClient?.fbp || userDataFromClient.fbp !== fbpFromCookieServer) 
+           : clientProvidedUserData?.fbc,
+      fbp: fbpFromCookieServer && (!clientProvidedUserData?.fbp || clientProvidedUserData.fbp !== fbpFromCookieServer) 
            ? fbpFromCookieServer 
-           : userDataFromClient?.fbp,
+           : clientProvidedUserData?.fbp,
     };
     
     if (!customData || !customData.content_name) {
@@ -53,13 +53,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Missing required customData fields for ViewContent.' }, { status: 400, headers: corsHeaders });
     }
 
-    console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] UserData being passed to sendViewContentEvent (will be enhanced by it):`, JSON.stringify(userData, null, 2));
+    console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] UserData being passed to sendViewContentEvent (will be enhanced by it):`, JSON.stringify(userDataForFbevents, null, 2));
     console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] CustomData to be sent:`, JSON.stringify(customData, null, 2));
     console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] Sending event to Facebook Conversions API via sendViewContentEvent`);
 
     const result = await sendViewContentEvent(
       request,
-      userData as UserData,
+      userDataForFbevents as UserData,
       customData,
       eventSourceUrl,
       eventId,

@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     eventId = body.eventId || eventId; // Update eventId if available in body
     console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Payload:`, JSON.stringify(body, null, 2));
 
-    const { userDataFromClient, eventSourceUrl, urlParameters } = body;
+    const { userData: clientProvidedUserData, eventSourceUrl, urlParameters } = body;
 
     const clientIp = request.headers.get('x-forwarded-for') || request.ip;
     // Log for IP is still useful here, as fbevents will use it.
@@ -41,44 +41,44 @@ export async function POST(request: NextRequest) {
     const fbpFromCookieServer = request.cookies.get('_fbp')?.value;
 
     // UserData will be enhanced with IP, User-Agent, and actual geo data (if IPDATA_API_KEY is set) by sendServerEvent in lib/fbevents.ts
-    const userData: Partial<UserData> = {
-      ...userDataFromClient,
+    const userDataForFbevents: Partial<UserData> = {
+      ...clientProvidedUserData,
       // client_ip_address and client_user_agent are set by sendServerEvent
       // Geolocation fields (ct, st, zp, country) are also set by sendServerEvent via getGeolocationData
-      fbc: fbcFromCookieServer && (!userDataFromClient?.fbc || userDataFromClient.fbc !== fbcFromCookieServer)
+      fbc: fbcFromCookieServer && (!clientProvidedUserData?.fbc || clientProvidedUserData.fbc !== fbcFromCookieServer)
            ? fbcFromCookieServer
-           : userDataFromClient?.fbc,
-      fbp: fbpFromCookieServer && (!userDataFromClient?.fbp || userDataFromClient.fbp !== fbpFromCookieServer)
+           : clientProvidedUserData?.fbc,
+      fbp: fbpFromCookieServer && (!clientProvidedUserData?.fbp || clientProvidedUserData.fbp !== fbpFromCookieServer)
            ? fbpFromCookieServer
-           : userDataFromClient?.fbp,
+           : clientProvidedUserData?.fbp,
     };
 
     // console.log('[API /pageview_DEBUG] Received request body:', JSON.stringify(body, null, 2));
 
-    if (fbcFromCookieServer && userData.fbc === fbcFromCookieServer) {
+    if (fbcFromCookieServer && userDataForFbevents.fbc === fbcFromCookieServer) {
       console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Using _fbc from server cookie: ${fbcFromCookieServer}`);
-    } else if (userData.fbc) {
-      console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Using _fbc from client: ${userData.fbc}`);
+    } else if (userDataForFbevents.fbc) {
+      console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Using _fbc from client: ${userDataForFbevents.fbc}`);
     } else {
       console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] No _fbc found from client or server cookie.`);
     }
 
-    if (fbpFromCookieServer && userData.fbp === fbpFromCookieServer) {
+    if (fbpFromCookieServer && userDataForFbevents.fbp === fbpFromCookieServer) {
       console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Using _fbp from server cookie: ${fbpFromCookieServer}`);
-    } else if (userData.fbp) {
-      console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Using _fbp from client: ${userData.fbp}`);
+    } else if (userDataForFbevents.fbp) {
+      console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Using _fbp from client: ${userDataForFbevents.fbp}`);
     } else {
       console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] No _fbp found from client or server cookie.`);
     }
 
     const customData = {};
 
-    console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] UserData being passed to sendPageViewEvent (will be enhanced by it):`, JSON.stringify(userData, null, 2));
+    console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] UserData being passed to sendPageViewEvent (will be enhanced by it):`, JSON.stringify(userDataForFbevents, null, 2));
     console.log(`[${timestamp}] [PAGEVIEW_EVENT] [${eventId}] Sending event to Facebook Conversions API via sendPageViewEvent`);
 
     const result = await sendPageViewEvent(
       request,
-      userData as UserData, // Cast to UserData; sendServerEvent handles missing fields.
+      userDataForFbevents as UserData,
       customData,
       eventSourceUrl,
       eventId,
