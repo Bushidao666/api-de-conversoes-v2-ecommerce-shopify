@@ -65,27 +65,11 @@ function generateUUID() {
   });
 }
 
-// Função para hash SHA-256
-async function sha256Hash(message) {
-  if (!message) return undefined;
-  
-  try {
-    const msgBuffer = new TextEncoder().encode(message.toLowerCase().trim());
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  } catch (error) {
-    console.error('Erro no hash SHA-256:', error);
-    return undefined;
-  }
-}
-
-// Função para normalizar telefone (formato brasileiro)
+// Função para normalizar telefone (REMOVIDA - O servidor pode lidar com alguma normalização antes do hashing)
+/*
 function normalizePhone(phone) {
   if (!phone) return undefined;
-  // Remove todos os caracteres não numéricos
   const digits = phone.replace(/\D/g, '');
-  // Adiciona +55 se não tiver código do país
   if (digits.length === 11 && digits.startsWith('1')) {
     return `+55${digits}`;
   } else if (digits.length === 10) {
@@ -95,6 +79,7 @@ function normalizePhone(phone) {
   }
   return `+55${digits}`;
 }
+*/
 
 // Função para obter/gerar external_id
 function getExternalId() {
@@ -135,7 +120,9 @@ function getFbclid() {
 // ==============================================
 
 // Configurações da API
-const API_BASE_URL = ''; // Deixe vazio se a API estiver no mesmo domínio, ou coloque a URL completa
+const API_BASE_URL = ''; // Deixe vazio se a API estiver no mesmo domínio.
+// Exemplo para API em domínio diferente (como Railway): 
+// const API_BASE_URL = 'https://sua-api-id.up.railway.app'; 
 const FACEBOOK_CONVERSIONS_CONFIG = {
   currency: 'BRL', // Moeda padrão
   debugMode: false, // Ative para logs detalhados
@@ -492,28 +479,26 @@ function trackCheckoutStart(checkoutData = {}) {
 // ==============================================
 
 async function processLeadForm(formData) {
-  // Normalizar e hashear os dados
+  // Coletar os dados brutos
   const fullName = formData.fullName.trim();
   const nameParts = fullName.split(' ');
   const firstName = nameParts[0];
   const lastName = nameParts.slice(1).join(' ') || firstName;
   
-  const normalizedPhone = normalizePhone(formData.phone);
-  
-  // Hashear os dados PII
-  const hashedData = {
-    em: await sha256Hash(formData.email),
-    ph: await sha256Hash(normalizedPhone),
-    fn: await sha256Hash(firstName),
-    ln: await sha256Hash(lastName)
+  // Dados PII brutos (o servidor irá hashear)
+  const piiData = {
+    em: formData.email.trim().toLowerCase(), // Normalização básica de email
+    ph: formData.phone.replace(/\D/g, ''),    // Enviar apenas dígitos do telefone
+    fn: firstName,
+    ln: lastName
   };
 
   // Atualizar dados globais do usuário
-  updateUserData(hashedData);
+  updateUserData(piiData);
   
-  debugLog('Dados do usuário atualizados', hashedData);
+  debugLog('Dados do usuário (brutos) atualizados para envio à API', piiData);
   
-  return hashedData;
+  return piiData; // Retorna os dados brutos que foram armazenados
 }
 
 // Handler do formulário
@@ -768,10 +753,11 @@ function trackProductViewWithPixel() {
   const capiPayload = {
     userData: {
       external_id: globalUserData.external_id ? [globalUserData.external_id] : undefined,
-      em: globalUserData.em ? [globalUserData.em] : undefined,
-      ph: globalUserData.ph ? [globalUserData.ph] : undefined,
-      fn: globalUserData.fn ? [globalUserData.fn] : undefined,
-      ln: globalUserData.ln ? [globalUserData.ln] : undefined,
+      // Enviar dados PII brutos para a API. O servidor cuidará do hashing.
+      em: globalUserData.em ? [globalUserData.em] : undefined, // Espera-se que globalUserData.em agora contenha o email bruto
+      ph: globalUserData.ph ? [globalUserData.ph] : undefined, // Espera-se que globalUserData.ph agora contenha o telefone bruto
+      fn: globalUserData.fn ? [globalUserData.fn] : undefined, // Espera-se que globalUserData.fn agora contenha o nome bruto
+      ln: globalUserData.ln ? [globalUserData.ln] : undefined, // Espera-se que globalUserData.ln agora contenha o sobrenome bruto
       fbc: globalUserData.fbc || undefined,
       fbp: globalUserData.fbp || undefined,
     },
@@ -1043,7 +1029,6 @@ Antes de colocar em produção, verifique:
 3. **Dados do Usuário:**
    - [ ] external_id sendo gerado e persistido
    - [ ] Cookies _fbp e _fbc sendo capturados
-   - [ ] Hash SHA-256 funcionando corretamente
    - [ ] localStorage persistindo dados entre páginas
 
 4. **Rastreamento:**

@@ -92,7 +92,7 @@ cd <project-directory>
 ```
 
 ### Environment Variables
-This project requires environment variables for Facebook API credentials and potentially webhook secrets.
+This project requires environment variables for Facebook API credentials, CORS configuration, and potentially webhook secrets and geolocation services.
 
 1.  **Create `.env.local` file:**
     Copy the `.env.example` file (if it doesn't exist, create one based on the template below) to a new file named `.env.local` in the project root.
@@ -103,12 +103,26 @@ This project requires environment variables for Facebook API credentials and pot
 2.  **Content for `.env.example` / `.env.local`:**
     ```env
     # Facebook Conversions API Credentials
+    # Note: The application code in lib/fbevents.ts currently uses process.env.FACEBOOK_DATASET_ID.
+    # If you set FACEBOOK_PIXEL_ID here, ensure lib/fbevents.ts is updated to use it,
+    # or set FACEBOOK_DATASET_ID instead with your Pixel ID.
     FACEBOOK_PIXEL_ID=YOUR_PIXEL_ID_HERE
+    # FACEBOOK_DATASET_ID=YOUR_PIXEL_ID_HERE_IF_NOT_CHANGING_FBEVENTS_TS
     FACEBOOK_ACCESS_TOKEN=YOUR_SYSTEM_USER_ACCESS_TOKEN_HERE
 
     # (Optional) Test Event Code for Facebook Events Manager
     # Use this if you want to send test events that appear only in the Facebook Events Manager testing tool.
     # FACEBOOK_TEST_EVENT_CODE=YOUR_TEST_EVENT_CODE_HERE
+
+    # CORS Configuration
+    # Specify the allowed origin for API requests (e.g., your website's domain)
+    # IMPORTANT: Do NOT include a trailing slash. Example: https://www.yourdomain.com
+    ALLOWED_ORIGIN=https://yourfrontenddomain.com
+
+    # Geolocation API Key (Optional, but recommended for better event matching)
+    # Used by lib/fbevents.ts to enrich user data with city, state, postal code, and country.
+    # Create an account at ipdata.co (they have a free tier) and get your API key.
+    IPDATA_API_KEY=YOUR_IPDATA_CO_API_KEY
 
     # Webhook Verification Tokens (if your webhooks use shared secrets for verification)
     # KIWIFY_WEBHOOK_SECRET=YOUR_KIWIFY_SECRET_IF_ANY
@@ -118,11 +132,13 @@ This project requires environment variables for Facebook API credentials and pot
     # NODE_ENV=development
     ```
 
-3.  **Fill in your credentials** in `.env.local`.
-    *   `FACEBOOK_PIXEL_ID`: Your Facebook Pixel ID.
+3.  **Fill in your credentials and configurations** in `.env.local`.
+    *   `FACEBOOK_PIXEL_ID` (or `FACEBOOK_DATASET_ID`): Your Facebook Pixel ID. (See note above).
     *   `FACEBOOK_ACCESS_TOKEN`: Your System User Access Token for the Conversions API.
-    *   `FACEBOOK_TEST_EVENT_CODE` (Optional): If you want to test events in Facebook's Event Manager without affecting your live data.
-    *   `KIWIFY_WEBHOOK_SECRET`, `CAKTO_WEBHOOK_SECRET` (Optional): If your webhook providers use a secret for signature verification.
+    *   `ALLOWED_ORIGIN`: The domain of your frontend making requests to this API (e.g., `https://www.yourwebsite.com`). **Do not include a trailing slash.**
+    *   `IPDATA_API_KEY`: Your API key from ipdata.co for geolocation.
+    *   `FACEBOOK_TEST_EVENT_CODE` (Optional).
+    *   Webhook secrets (Optional).
 
     **Important:** `.env.local` is listed in `.gitignore` and should NOT be committed to your repository.
 
@@ -427,11 +443,28 @@ async function sendCapiViewContent(productDetails) {
 ## Important Notes
 
 ### Data Hashing
-Facebook requires Personally Identifiable Information (PII) like email addresses, phone numbers, names, etc., to be hashed using SHA-256 before being sent.
-*   Emails: Normalize to lowercase before hashing.
-*   Phone Numbers: Normalize to E.164 format (e.g., +15551234567) before hashing.
-*   Names: Normalize to lowercase.
-The `lib/fbevents.ts` in this project *may* already handle hashing if it receives raw PII. **Verify this behavior.** If `fbevents.ts` expects already hashed data, your frontend (or the service calling this API) *must* perform the hashing. The frontend examples above include a placeholder for client-side hashing.
+Facebook requires Personally Identifiable Information (PII) like email addresses, phone numbers, names, etc., to be hashed using SHA-256 before being sent to them.
+
+**This API service (`lib/fbevents.ts`) automatically handles the SHA-256 hashing of the following PII fields if they are provided in the `userData` object:**
+*   `em` (email)
+*   `ph` (phone number)
+*   `fn` (first name)
+*   `ln` (last name)
+*   `ge` (gender)
+*   `db` (date of birth)
+*   `ct` (city)
+*   `st` (state/region)
+*   `zp` (zip/postal code)
+*   `country` (country code)
+
+**Therefore, your client-side integration should send these PII fields eleições (not pre-hashed) to this API.** The API will perform the necessary normalization (e.g., lowercase for emails and names, E.164 for phones) and hashing before forwarding the data to Facebook.
+
+*Client-side considerations:*
+*   Emails: Collect as is (e.g., `test@example.com`).
+*   Phone Numbers: Collect in a common format; the server will attempt E.164 normalization (e.g., `(555) 123-4567` or `5551234567`).
+*   Names: Collect as is.
+
+This server-side hashing approach simplifies client-side logic and ensures consistent hashing methodology.
 
 ### User Consent
 Always ensure you have explicit user consent before collecting or processing any user data, in compliance with GDPR, CCPA, LGPD, and other relevant privacy regulations.
