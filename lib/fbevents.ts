@@ -306,6 +306,19 @@ export async function sendInitiateCheckoutEvent(
   return sendServerEvent('InitiateCheckout', request, userData, customData, eventSourceUrl, eventId, urlParameters);
 }
 
+// New function for Lead event
+export async function sendLeadEvent(
+  request: NextRequest,
+  userData: UserData = {},
+  customData: CustomData = {}, // Lead events typically don't require customData, but good to include for flexibility
+  eventSourceUrl?: string,
+  eventId?: string,
+  urlParameters?: { [key: string]: string },
+  event_time_override?: number
+) {
+  return sendServerEvent('Lead', request, userData, customData, eventSourceUrl, eventId, urlParameters, event_time_override);
+}
+
 // Nova função específica para Purchase que pode receber o event_time do webhook
 export async function sendPurchaseEventViaWebhook(
   request: NextRequest, // Ainda necessário para IP/UA se não vierem no payload da Kiwify de forma confiável

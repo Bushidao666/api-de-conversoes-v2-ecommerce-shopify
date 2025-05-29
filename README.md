@@ -20,6 +20,7 @@ This project provides a standalone backend service built with Next.js (App Route
         *   [POST /api/track/pageview](#post-apitrackpageview)
         *   [POST /api/track/viewcontent](#post-apitrackviewcontent)
         *   [POST /api/track/initiatecheckout](#post-apitrackinitiatecheckout)
+        *   [POST /api/track/lead](#post-apitracklead)
     *   [Webhook Endpoints](#webhook-endpoints)
         *   [POST /api/webhooks/cakto](#post-apiwebhookscakto)
         *   [POST /api/webhooks/kiwify](#post-apiwebhookskiwify)
@@ -44,7 +45,9 @@ This project provides a standalone backend service built with Next.js (App Route
 │   │   │   │   └── route.ts
 │   │   │   ├── viewcontent/
 │   │   │   │   └── route.ts
-│   │   │   └── initiatecheckout/
+│   │   │   ├── initiatecheckout/
+│   │   │   │   └── route.ts
+│   │   │   └── lead/
 │   │   │       └── route.ts
 │   │   └── webhooks/         # Endpoints for receiving webhooks from third-party services
 │   │       ├── cakto/
@@ -69,7 +72,7 @@ This project provides a standalone backend service built with Next.js (App Route
 
 ## Features
 
-*   Handles standard Facebook events: `PageView`, `ViewContent`, `InitiateCheckout`.
+*   Handles standard Facebook events: `PageView`, `ViewContent`, `InitiateCheckout`, `Lead`.
 *   Webhook endpoints for `Cakto` and `Kiwify` (Kiwify is a placeholder).
 *   Built with Next.js App Router for modern API routing.
 *   Written in TypeScript.
@@ -272,6 +275,38 @@ Tracks when a user starts the checkout process.
 }
 ```
 *   `customData`: Contains event-specific parameters for `InitiateCheckout`.
+
+#### `POST /api/track/lead`
+Tracks when a user becomes a lead (e.g., fills out a form).
+
+**Request Body (JSON):**
+```json
+{
+  "eventId": "EVENT_ID_UNIQUE_PER_EVENT",
+  "userData": {
+    "em": ["hashed_email@example.com"], // Hashed lowercase email
+    "ph": ["hashed_phone_number"],      // Hashed phone number (E.164 format, then hashed)
+    "fn": ["hashed_first_name"],        // Hashed lowercase first name
+    "ln": ["hashed_last_name"],         // Hashed lowercase last name
+    "client_ip_address": "USER_CLIENT_IP_ADDRESS", // e.g., from X-Forwarded-For header
+    "client_user_agent": "USER_BROWSER_USER_AGENT",
+    "fbc": "fb.1.1554763741205.AbCdEfGhIjKlMnOpQrStUvWxYz", // _fbc cookie value
+    "fbp": "fb.1.1558571054389.1098115397",                 // _fbp cookie value
+    "external_id": ["USER_UNIQUE_EXTERNAL_ID"]             // Your system's unique user ID
+    // Other fields like ge, db, zp, ct, st as per Facebook documentation
+  },
+  "eventSourceUrl": "FULL_PAGE_URL_WHERE_EVENT_OCCURRED",
+  "urlParameters": { // Optional: query parameters from the URL
+    "utm_source": "facebook",
+    "utm_medium": "cpc"
+  },
+  "actionSource": "website" // Typically "website" for web events
+}
+```
+*   `eventId`: A unique ID for this specific event instance. Helps with deduplication.
+*   `userData`: User data fields. **Hashing PII is crucial.**
+*   `eventSourceUrl`: The browser URL where the event happened.
+*   `actionSource`: Typically "website".
 
 ### Webhook Endpoints
 
@@ -477,7 +512,7 @@ Facebook uses the `event_name`, `event_id`, and `fbp` (if present) to deduplicat
 ## Further Development
 
 *   **Implement Kiwify Webhook Logic:** Add the specific processing logic in `app/api/webhooks/kiwify/route.ts`.
-*   **Add More Event Types:** Extend `/api/track/` with handlers for other standard Facebook events (e.g., `AddToCart`, `Purchase`, `Lead`, `CompleteRegistration`) or custom events as needed.
+*   **Add More Event Types:** Extend `/api/track/` with handlers for other standard Facebook events (e.g., `AddToCart`, `Purchase`, `CompleteRegistration`) or custom events as needed.
 *   **Error Handling and Logging:** Enhance error handling and implement more robust logging (e.g., using a dedicated logging service).
 *   **Input Validation:** Add strict input validation to all API endpoints (e.g., using Zod or Joi) to ensure data integrity.
 *   **Security:** Review security best practices, especially for webhook signature verification if secrets are used.

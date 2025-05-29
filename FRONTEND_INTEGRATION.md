@@ -10,11 +10,12 @@ Este documento fornece exemplos práticos e completos de como integrar qualquer 
 4. [Implementação do Evento PageView](#implementação-do-evento-pageview)
 5. [Implementação do Evento ViewContent](#implementação-do-evento-viewcontent)
 6. [Implementação do Evento InitiateCheckout](#implementação-do-evento-initiatecheckout)
-7. [Captura de Dados do Usuário (Lead Form)](#captura-de-dados-do-usuário-lead-form)
-8. [Script Completo de Exemplo](#script-completo-de-exemplo)
-9. [Integração com Facebook Pixel](#integração-com-facebook-pixel)
-10. [Debugging e Monitoramento](#debugging-e-monitoramento)
-11. [Considerações de Performance](#considerações-de-performance)
+7. [Implementação do Evento Lead](#implementação-do-evento-lead)
+8. [Captura de Dados do Usuário (Lead Form)](#captura-de-dados-do-usuário-lead-form)
+9. [Script Completo de Exemplo](#script-completo-de-exemplo)
+10. [Integração com Facebook Pixel](#integração-com-facebook-pixel)
+11. [Debugging e Monitoramento](#debugging-e-monitoramento)
+12. [Considerações de Performance](#considerações-de-performance)
 
 ## Visão Geral
 
@@ -448,9 +449,101 @@ function trackCheckoutStart(checkoutData = {}) {
 </script>
 ```
 
+## Implementação do Evento Lead
+
+### 6. Evento Lead
+
+```html
+<script>
+// ==============================================
+// EVENTO LEAD
+// ==============================================
+
+async function sendLeadEvent(leadData) {
+  const eventId = generateUUID();
+  const urlParameters = getUrlParameters();
+
+  const payload = {
+    eventId: eventId,
+    userData: {
+      external_id: globalUserData.external_id ? [globalUserData.external_id] : undefined,
+      em: globalUserData.em ? [globalUserData.em] : undefined,
+      ph: globalUserData.ph ? [globalUserData.ph] : undefined,
+      fn: globalUserData.fn ? [globalUserData.fn] : undefined,
+      ln: globalUserData.ln ? [globalUserData.ln] : undefined,
+      fbc: globalUserData.fbc || undefined,
+      fbp: globalUserData.fbp || undefined,
+    },
+    customData: {
+      ...leadData,
+      content_type: 'lead',
+      contents: [{
+        id: 'lead',
+        quantity: 1,
+        item_price: 0
+      }],
+      num_items: 1
+    },
+    eventSourceUrl: window.location.href,
+    urlParameters: urlParameters,
+    actionSource: 'website'
+  };
+
+  // Remove campos undefined
+  Object.keys(payload.userData).forEach(key => {
+    if (payload.userData[key] === undefined) {
+      delete payload.userData[key];
+    }
+  });
+
+  try {
+    debugLog('Enviando Lead', payload);
+    
+    const response = await fetch(`${API_BASE_URL}/api/track/lead`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+    
+    if (result.message && result.message.includes('successfully')) {
+      debugLog('Lead enviado com sucesso', { eventId, fbtrace_id: result.fbtrace_id });
+    } else {
+      console.error('Erro no Lead:', result);
+    }
+  } catch (error) {
+    console.error('Erro ao enviar Lead:', error);
+  }
+}
+
+// Exemplo de uso para um evento de lead
+function trackLeadEvent() {
+  const leadData = {
+    fullName: 'Nome do Lead',
+    email: 'lead@example.com',
+    phone: '1234567890'
+  };
+  
+  sendLeadEvent(leadData);
+}
+
+// Auto-track se estiver em uma página de lead
+// Adapte esta lógica conforme sua estrutura de página
+document.addEventListener('DOMContentLoaded', function() {
+  // Exemplo: se a URL contém '/lead/' ou há um elemento específico
+  if (window.location.pathname.includes('/lead/') || document.querySelector('.lead-form')) {
+    setTimeout(trackLeadEvent, 500);
+  }
+});
+</script>
+```
+
 ## Captura de Dados do Usuário (Lead Form)
 
-### 6. Formulário de Captura de Leads
+### 7. Formulário de Captura de Leads
 
 ```html
 <!-- HTML do formulário -->
@@ -515,6 +608,13 @@ document.getElementById('leadForm').addEventListener('submit', async function(e)
     // Processar dados do formulário
     await processLeadForm(formData);
     
+    // Enviar evento Lead com os dados atualizados
+    await sendLeadEvent({
+      content_name: 'Lead Form Submission',
+      lead_source: 'website_form',
+      form_name: 'leadForm'
+    });
+    
     // Enviar evento InitiateCheckout com os dados atualizados
     const eventId = await trackCheckoutStart();
     
@@ -562,7 +662,7 @@ function buildCheckoutUrl(formData, eventId) {
 
 ## Script Completo de Exemplo
 
-### 7. Implementação Completa em Uma Página
+### 8. Implementação Completa em Uma Página
 
 ```html
 <!DOCTYPE html>
@@ -679,7 +779,7 @@ function buildCheckoutUrl(formData, eventId) {
 
 ## Integração com Facebook Pixel
 
-### 8. Deduplicação com Pixel Client-Side
+### 9. Deduplicação com Pixel Client-Side
 
 ```html
 <script>
@@ -709,6 +809,9 @@ async function sendDualEvent(eventName, pixelParams, capiPayload) {
       break;
     case 'InitiateCheckout':
       endpoint = 'initiatecheckout';
+      break;
+    case 'Lead':
+      endpoint = 'lead';
       break;
     default:
       console.warn(`Evento ${eventName} não suportado na CAPI`);
@@ -790,7 +893,7 @@ function trackProductViewWithPixel() {
 
 ## Debugging e Monitoramento
 
-### 9. Ferramentas de Debug
+### 10. Ferramentas de Debug
 
 ```html
 <script>
@@ -890,7 +993,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 ## Considerações de Performance
 
-### 10. Otimizações e Boas Práticas
+### 11. Otimizações e Boas Práticas
 
 ```html
 <script>
@@ -1024,6 +1127,7 @@ Antes de colocar em produção, verifique:
    - [ ] PageView enviado automaticamente ao carregar
    - [ ] ViewContent para páginas de produto
    - [ ] InitiateCheckout no formulário de leads
+   - [ ] Lead enviado após captura de dados do usuário
    - [ ] Deduplicação configurada (se usar Pixel)
 
 3. **Dados do Usuário:**
