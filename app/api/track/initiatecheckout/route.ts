@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] UserData being passed to sendInitiateCheckoutEvent (after server cookie check):`, JSON.stringify(userDataForFbevents, null, 2));
     console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] CustomData from client to be sent:`, JSON.stringify(customDataFromClient, null, 2));
-    
+
     const result = await sendInitiateCheckoutEvent(
       request,
       userDataForFbevents as UserData,

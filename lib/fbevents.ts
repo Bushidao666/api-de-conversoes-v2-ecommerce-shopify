@@ -186,7 +186,7 @@ export async function sendServerEvent(
   console.log(`[FBEVENTS_DEBUG] Base CustomData from API Route:`, JSON.stringify(customData, null, 2));
   console.log(`[FBEVENTS_DEBUG] URL Parameters from API Route:`, JSON.stringify(urlParameters, null, 2));
   console.log(`[FBEVENTS_DEBUG] Captured IP: ${clientIpAddress}, User-Agent: ${clientUserAgent}`);
-
+  
   // --- Robust fbclid handling --- 
   let fbcValueForUserData: string | undefined = userData?.fbc; // Start with fbc from cookie (passed in userData)
   console.log(`[FBEVENTS_DEBUG] Initial fbc from userData (cookie): ${fbcValueForUserData}`);

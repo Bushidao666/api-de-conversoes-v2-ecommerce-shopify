@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] UserData being passed to sendViewContentEvent (after server cookie check):`, JSON.stringify(userDataForFbevents, null, 2));
     console.log(`[${timestamp}] [VIEW_CONTENT_EVENT] [${eventId}] CustomData from client to be sent:`, JSON.stringify(customDataFromClient, null, 2));
-    
+
     const result = await sendViewContentEvent(
       request,
       userDataForFbevents as UserData,

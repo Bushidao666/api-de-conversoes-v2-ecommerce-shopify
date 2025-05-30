@@ -30,6 +30,7 @@ This project provides a standalone backend service built with Next.js (App Route
     *   [Example: Sending Other Standard Events (e.g., ViewContent)](#example-sending-other-standard-events-eg-viewcontent)
 8.  [Important Notes](#important-notes)
     *   [Data Hashing](#data-hashing)
+    *   [Facebook Click ID (`fbclid` / `fbc`) Handling](#facebook-click-id-fbclid-fbc-handling)
     *   [User Consent](#user-consent)
     *   [Event Deduplication](#event-deduplication)
 9.  [Further Development](#further-development)
@@ -492,14 +493,24 @@ Facebook requires Personally Identifiable Information (PII) like email addresses
 *   `zp` (zip/postal code)
 *   `country` (country code)
 
-**Therefore, your client-side integration should send these PII fields eleições (not pre-hashed) to this API.** The API will perform the necessary normalization (e.g., lowercase for emails and names, E.164 for phones) and hashing before forwarding the data to Facebook.
+**Therefore, your client-side integration should send these PII fields raw (not pre-hashed) to this API.** The API will perform the necessary normalization (e.g., lowercase for emails and names, remove non-digits for phones) and hashing before forwarding the data to Facebook.
 
 *Client-side considerations:*
 *   Emails: Collect as is (e.g., `test@example.com`).
-*   Phone Numbers: Collect in a common format; the server will attempt E.164 normalization (e.g., `(555) 123-4567` or `5551234567`).
+*   Phone Numbers: Collect in a common format; the server will attempt normalization.
 *   Names: Collect as is.
 
 This server-side hashing approach simplifies client-side logic and ensures consistent hashing methodology.
+
+### Facebook Click ID (`fbclid` / `fbc`) Handling
+To maximize event match quality, this API service implements robust handling for `fbclid`:
+*   **Priority to URL `fbclid`:** The backend prioritizes the `fbclid` value if it's passed by the client in the `urlParameters` field of the request payload. This `fbclid` is used to populate `user_data.fbc`.
+*   **Fallback to `customData` (Defensive):** If `fbclid` is not in `urlParameters` but is mistakenly sent by the client within the `customData` object, the backend will attempt to use it for `user_data.fbc` as a fallback.
+*   **Cookie `_fbc` Value:** If no `fbclid` is found via URL or client-provided `customData`, the `fbc` value present in the `userData` object (which should originate from the `_fbc` cookie, potentially updated by server-side cookie reading in the API Route) is used.
+*   **Cleaning `custom_data`:** In all scenarios, `fbclid` is removed from `urlParameters` and `customData` before any remaining URL parameters (like UTMs) are merged into the final `custom_data` object sent to Facebook. This ensures `fbclid` is not erroneously present in `custom_data`.
+*   **No Hashing:** The `user_data.fbc` field is correctly sent广告 (not hashed).
+
+Your client-side integration should send `urlParameters` (containing all current URL query parameters) separately in the payload. The `customData` object sent by the client should only contain data specific to the event itself, not URL parameters like `fbclid` or UTMs.
 
 ### User Consent
 Always ensure you have explicit user consent before collecting or processing any user data, in compliance with GDPR, CCPA, LGPD, and other relevant privacy regulations.
