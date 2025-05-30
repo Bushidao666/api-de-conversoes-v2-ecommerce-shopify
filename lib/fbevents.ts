@@ -48,6 +48,7 @@ export interface ServerEvent {
 
 const DATASET_ID = process.env.FACEBOOK_DATASET_ID || '701320582382618';
 const ACCESS_TOKEN = process.env.FACEBOOK_ACCESS_TOKEN || 'EAAVZA2wID1AEBO0NupBzTMuPbn4GBZCInGDNw7Spd2a7DdKcmUgKcjhvbZC67ZCbEgBfZBdm2UiCnPrTiM0JJUdvWkPvNHyeXxOE8JpRi7I0OUlrCydePLGt7F4okAUJw0vxMJguom3yXHwLhahbZBcU2rnYC4dM74AQijN7m4jtQ6hHdTQpJWgxRTk0sOSghZBrwZDZD';
+const TEST_EVENT_CODE = process.env.FACEBOOK_TEST_EVENT_CODE;
 
 const IPDATA_API_KEY = process.env.IPDATA_API_KEY;
 
@@ -162,7 +163,7 @@ async function hashUserData(userData: UserData): Promise<UserData> {
 
 export async function sendServerEvent(
   eventName: string,
-  request: NextRequest, // To get IP and User Agent
+  request: NextRequest,
   userData: UserData = {},
   customData: CustomData = {},
   eventSourceUrl?: string,
@@ -172,59 +173,89 @@ export async function sendServerEvent(
 ) {
   if (!ACCESS_TOKEN || !DATASET_ID) {
     console.error('[FBEVENTS_DEBUG] Facebook Dataset ID or Access Token is missing.');
-    return;
+    return { success: false, error: 'Missing Facebook API credentials on server.' };
   }
+
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] [FBEVENTS] sendServerEvent called for ${eventName}. Event ID: ${eventId}`);
 
   const eventTime = event_time_override || Math.floor(Date.now() / 1000);
   const clientIpAddress = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || request.headers.get('x-real-ip');
   const clientUserAgent = request.headers.get('user-agent');
-  
+  console.log(`[FBEVENTS_DEBUG] Base UserData from API Route:`, JSON.stringify(userData, null, 2));
+  console.log(`[FBEVENTS_DEBUG] Base CustomData from API Route:`, JSON.stringify(customData, null, 2));
+  console.log(`[FBEVENTS_DEBUG] URL Parameters from API Route:`, JSON.stringify(urlParameters, null, 2));
   console.log(`[FBEVENTS_DEBUG] Captured IP: ${clientIpAddress}, User-Agent: ${clientUserAgent}`);
-  
-  let fbcFromUrl: string | undefined = undefined;
-  const processedUrlParameters = { ...urlParameters };
 
-  if (urlParameters && urlParameters.fbclid) {
-    fbcFromUrl = urlParameters.fbclid;
-    console.log(`[FBEVENTS_DEBUG] fbclid found in URL parameters: ${fbcFromUrl}`);
-    delete processedUrlParameters.fbclid;
+  // --- Robust fbclid handling --- 
+  let fbcValueForUserData: string | undefined = userData?.fbc; // Start with fbc from cookie (passed in userData)
+  console.log(`[FBEVENTS_DEBUG] Initial fbc from userData (cookie): ${fbcValueForUserData}`);
+
+  let tempUrlParams = urlParameters ? { ...urlParameters } : {};
+  let tempCustomData = customData ? { ...customData } : {};
+
+  // Priority 1: fbclid from urlParameters
+  if (tempUrlParams.fbclid) {
+    fbcValueForUserData = tempUrlParams.fbclid;
+    console.log(`[FBEVENTS_DEBUG] fbclid found in urlParameters. Set as fbc: ${fbcValueForUserData}. Removing from tempUrlParams.`);
+    delete tempUrlParams.fbclid;
+  } else {
+    console.log(`[FBEVENTS_DEBUG] fbclid NOT found in urlParameters.`);
   }
 
+  // Priority 2 (Fallback): fbclid from customData (if frontend sent it there mistakenly)
+  if (!fbcValueForUserData && tempCustomData.fbclid) {
+    fbcValueForUserData = tempCustomData.fbclid as string; // Assuming it would be a string if present
+    console.log(`[FBEVENTS_DEBUG] fbclid found in customData (fallback). Set as fbc: ${fbcValueForUserData}. Removing from tempCustomData.`);
+    delete tempCustomData.fbclid;
+  } else if (tempCustomData.hasOwnProperty('fbclid')) {
+    // If fbcValueForUserData was already set (e.g. from urlParameters), still remove fbclid from tempCustomData
+    console.log(`[FBEVENTS_DEBUG] fbclid also found in customData, but fbc already set. Removing from tempCustomData.`);
+    delete tempCustomData.fbclid;
+  }
+  console.log(`[FBEVENTS_DEBUG] Final fbc value for user_data: ${fbcValueForUserData}`);
+  // --- End of fbclid handling ---
+
   let enhancedUserData: UserData = {
-    ...userData, // This might already contain fbc/fbp from cookies via API route
+    ...userData, // Includes original fbc (cookie), em, ph, fn, ln etc.
     client_ip_address: clientIpAddress || undefined,
     client_user_agent: clientUserAgent || undefined,
   };
 
-  if (fbcFromUrl) {
-    enhancedUserData.fbc = fbcFromUrl; 
+  if (fbcValueForUserData) {
+    enhancedUserData.fbc = fbcValueForUserData; // Override with the determined fbc value
   }
+  console.log(`[FBEVENTS_DEBUG] UserData before geo-enrichment (fbc processed):`, JSON.stringify(enhancedUserData, null, 2));
 
-  if (clientIpAddress) {
+  if (clientIpAddress && IPDATA_API_KEY) { // Ensure API key is present for geolocation
     console.log(`[FBEVENTS_DEBUG] Attempting geolocation for IP: ${clientIpAddress}`);
     const geoData = await getGeolocationData(clientIpAddress);
     console.log(`[FBEVENTS_DEBUG] Geolocation data received:`, JSON.stringify(geoData, null, 2));
     enhancedUserData = { ...enhancedUserData, ...geoData };
+  } else if (clientIpAddress && !IPDATA_API_KEY) {
+    console.warn('[FBEVENTS_DEBUG] IPDATA_API_KEY is not set. Skipping geolocation lookup.');
   }
-  console.log(`[FBEVENTS_DEBUG] Enhanced user data (pre-hash):`, JSON.stringify(enhancedUserData, null, 2));
+  console.log(`[FBEVENTS_DEBUG] Enhanced user data (pre-hash, fbc and geo processed):`, JSON.stringify(enhancedUserData, null, 2));
 
-  // Hash PII data before sending
   const hashedUserData = await hashUserData(enhancedUserData);
   console.log(`[FBEVENTS_DEBUG] Hashed user data (to be sent):`, JSON.stringify(hashedUserData, null, 2));
 
-  // Merge processedUrlParameters (without fbclid) into customData if provided
-  let finalCustomData = { ...customData };
-  if (Object.keys(processedUrlParameters).length > 0) {
-    finalCustomData = { ...finalCustomData, ...processedUrlParameters };
+  // tempCustomData is now the customData from API route, potentially cleaned of fbclid.
+  // tempUrlParams is now urlParameters from API route, cleaned of fbclid.
+  let finalCustomData = { ...tempCustomData };
+  if (Object.keys(tempUrlParams).length > 0) {
+    console.log(`[FBEVENTS_DEBUG] Merging cleaned tempUrlParams into finalCustomData. Cleaned tempUrlParams:`, JSON.stringify(tempUrlParams), "Cleaned Initial CustomData:", JSON.stringify(tempCustomData));
+    finalCustomData = { ...finalCustomData, ...tempUrlParams }; // Merge remaining (UTMs etc.)
   }
+  console.log(`[FBEVENTS_DEBUG] Final custom_data for payload:`, JSON.stringify(finalCustomData));
 
   const payload: ServerEvent = {
     event_name: eventName,
     event_time: eventTime,
     user_data: hashedUserData,
-    custom_data: finalCustomData,
+    custom_data: finalCustomData, // This should NOT contain fbclid
     action_source: 'website',
-    event_source_url: eventSourceUrl || request.nextUrl.href, // Default to current URL
+    event_source_url: eventSourceUrl || (request.nextUrl ? request.nextUrl.href : undefined),
   };
 
   if (eventId) {
@@ -241,33 +272,32 @@ export async function sendServerEvent(
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ data: [payload] }),
+        body: JSON.stringify({ data: [payload], ...(TEST_EVENT_CODE && { test_event_code: TEST_EVENT_CODE }) }),
       }
     );
 
     const responseData = await response.json();
-
     console.log(`[FBEVENTS_DEBUG] Response from Facebook for ${eventName} (ID: ${payload.event_id}):`, JSON.stringify(responseData, null, 2));
 
     if (!response.ok) {
       console.error(`[FBEVENTS_DEBUG] Error sending Facebook server event ${eventName} (ID: ${payload.event_id}):`, responseData);
-      return { success: false, error: responseData };
+      return { success: false, error: responseData, event_id: payload.event_id };
     } 
 
-    if (responseData.events_received === 1) {
-        // Check for specific error messages from Facebook if needed
+    if (responseData.events_received === 1 || responseData.fbtrace_id) { // Check fbtrace_id as well for success
         if (responseData.fbtrace_id) {
             console.log(`[FBEVENTS_DEBUG] Facebook event ${eventName} (ID: ${payload.event_id}) sent successfully. Trace ID: ${responseData.fbtrace_id}`);
         }
         return { success: true, fbtrace_id: responseData.fbtrace_id, event_id: payload.event_id };
     } else {
-        console.warn(`[FBEVENTS_DEBUG] Facebook event API did not confirm event ${eventName} (ID: ${payload.event_id}) received:`, responseData);
+        console.warn(`[FBEVENTS_DEBUG] Facebook event API did not confirm event ${eventName} (ID: ${payload.event_id}) received as expected:`, responseData);
         return { success: false, warning: responseData, event_id: payload.event_id };
     }
 
   } catch (error) {
-    console.error(`[FBEVENTS_DEBUG] Failed to send Facebook server event ${eventName} (ID: ${payload.event_id}):`, error);
-    return { success: false, error, event_id: payload.event_id };
+    const err = error as Error;
+    console.error(`[FBEVENTS_DEBUG] Failed to send Facebook server event ${eventName} (ID: ${payload?.event_id || 'N/A'}):`, err.message, err.stack);
+    return { success: false, error: err.message, event_id: payload?.event_id || 'N/A' };
   }
 }
 

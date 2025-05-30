@@ -28,17 +28,19 @@ export async function POST(request: NextRequest) {
     console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] Received event from client`);
     const body = await request.json();
     eventId = body.eventId || eventId;
-    console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Payload:`, JSON.stringify(body, null, 2));
+    console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Payload from client:`, JSON.stringify(body, null, 2));
 
-    const { userData: clientProvidedUserData, customData, eventSourceUrl, urlParameters } = body;
-
-    const clientIp = request.headers.get('x-forwarded-for') || request.ip;
-    console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Client IP for fbevents: ${clientIp || 'Not found'}`);
+    const { 
+        userData: clientProvidedUserData, 
+        customData: customDataFromClient,
+        eventSourceUrl, 
+        urlParameters: urlParametersFromClient
+    } = body;
 
     const fbcFromCookieServer = request.cookies.get('_fbc')?.value;
     const fbpFromCookieServer = request.cookies.get('_fbp')?.value;
 
-    const userDataForFbevents: Partial<UserData> = {
+    let userDataForFbevents: Partial<UserData> = {
       ...clientProvidedUserData,
       fbc: fbcFromCookieServer && (!clientProvidedUserData?.fbc || clientProvidedUserData.fbc !== fbcFromCookieServer) 
            ? fbcFromCookieServer 
@@ -48,22 +50,37 @@ export async function POST(request: NextRequest) {
            : clientProvidedUserData?.fbp,
     };
 
-    if (!customData || typeof customData.value === 'undefined' || !customData.currency) {
-        console.warn(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Missing required customData fields (value, currency). Request body:`, JSON.stringify(customData, null, 2));
+    if (fbcFromCookieServer && userDataForFbevents.fbc === fbcFromCookieServer) {
+      console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Using _fbc from server cookie: ${fbcFromCookieServer}`);
+    } else if (userDataForFbevents.fbc) {
+      console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Using _fbc from client: ${userDataForFbevents.fbc}`);
+    } else {
+      console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] No _fbc found from client or server cookie for InitiateCheckout event.`);
+    }
+
+    if (fbpFromCookieServer && userDataForFbevents.fbp === fbpFromCookieServer) {
+      console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Using _fbp from server cookie: ${fbpFromCookieServer}`);
+    } else if (userDataForFbevents.fbp) {
+      console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Using _fbp from client: ${userDataForFbevents.fbp}`);
+    } else {
+      console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] No _fbp found from client or server cookie for InitiateCheckout event.`);
+    }
+
+    if (!customDataFromClient || typeof customDataFromClient.value === 'undefined' || !customDataFromClient.currency) {
+        console.warn(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Missing required customData fields (value, currency). Request body:`, JSON.stringify(customDataFromClient, null, 2));
         return NextResponse.json({ message: 'Missing required customData fields for InitiateCheckout (e.g., value, currency).' }, { status: 400, headers: corsHeaders });
     }
 
-    console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] UserData being passed to sendInitiateCheckoutEvent (will be enhanced by it):`, JSON.stringify(userDataForFbevents, null, 2));
-    console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] CustomData to be sent:`, JSON.stringify(customData, null, 2));
-    console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Sending event to Facebook Conversions API via sendInitiateCheckoutEvent`);
-
+    console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] UserData being passed to sendInitiateCheckoutEvent (after server cookie check):`, JSON.stringify(userDataForFbevents, null, 2));
+    console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] CustomData from client to be sent:`, JSON.stringify(customDataFromClient, null, 2));
+    
     const result = await sendInitiateCheckoutEvent(
       request,
       userDataForFbevents as UserData,
-      customData,
+      customDataFromClient,
       eventSourceUrl,
       eventId,
-      urlParameters
+      urlParametersFromClient
     );
 
     console.log(`[${timestamp}] [INITIATE_CHECKOUT_EVENT] [${eventId}] Facebook Conversions API response:`, JSON.stringify(result, null, 2));
