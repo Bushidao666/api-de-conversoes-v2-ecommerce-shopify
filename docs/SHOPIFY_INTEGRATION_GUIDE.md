@@ -1,6 +1,7 @@
 # 🛍️ Shopify Integration Guide - Facebook Conversions API E-commerce
 
 **Guia completo para integração da API de Conversões do Facebook com temas da Shopify**
+*Atualizado com todas as melhorias de qualidade e novos eventos implementados*
 
 ---
 
@@ -13,6 +14,7 @@
 5. [Configuração Avançada](#configuração-avançada)
 6. [Troubleshooting](#troubleshooting)
 7. [Exemplos Completos](#exemplos-completos)
+8. [Atualizações e Melhorias](#atualizações-e-melhorias)
 
 ---
 
@@ -27,11 +29,35 @@
 
 ### **📍 Variáveis de Ambiente Necessárias:**
 ```bash
-# Na sua API Backend
+# Na sua API Backend (.env.local)
 FACEBOOK_DATASET_ID=seu_dataset_id
 FACEBOOK_ACCESS_TOKEN=seu_access_token
 ALLOWED_ORIGIN=https://sua-loja.myshopify.com
 IPDATA_API_KEY=sua_chave_ipdata (opcional)
+
+# Configurações adicionais (opcionais)
+NODE_ENV=production
+DEBUG_MODE=false
+RATE_LIMIT_ENABLED=true
+MAX_REQUESTS_PER_MINUTE=100
+```
+
+### **📦 Dependências da API (Implementadas):**
+```json
+{
+  "dependencies": {
+    "next": "14.2.3",
+    "react": "18.3.1",
+    "typescript": "5.8.3",
+    "zod": "^3.22.4",           // ✅ Validação robusta de dados
+    "date-fns": "^3.3.1"       // ✅ Manipulação de datas
+  },
+  "devDependencies": {
+    "eslint": "8.57.0",
+    "@types/node": "20.11.24",
+    "@types/react": "18.2.61"
+  }
+}
 ```
 
 ---
@@ -319,6 +345,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
 **Arquivo:** `checkout.liquid` ou na página de método de pagamento
 
+**⚠️ IMPORTANTE:** Este evento deve ser disparado quando o usuário adiciona informações de pagamento válidas, não apenas quando seleciona um método.
+
 ```liquid
 <!-- Quando o usuário seleciona/adiciona método de pagamento -->
 <script>
@@ -326,19 +354,60 @@ document.addEventListener('DOMContentLoaded', function() {
   // Detectar mudanças nos métodos de pagamento
   const paymentForms = document.querySelectorAll('form[action*="/checkout"], .payment-form, [data-payment]');
   
+  // Flag para evitar múltiplos envios
+  let paymentInfoSent = false;
+  
   paymentForms.forEach(function(form) {
     form.addEventListener('change', function(e) {
-      // Se mudou método de pagamento ou adicionou informações
-      if (e.target.name && (e.target.name.includes('payment') || e.target.type === 'radio')) {
-        sendAddPaymentInfoEvent();
+      // Reset flag se mudou método de pagamento
+      if (e.target.name && e.target.name.includes('payment_method')) {
+        paymentInfoSent = false;
+      }
+      
+      // Se adicionou informações de pagamento válidas
+      if (e.target.name && (
+        e.target.name.includes('payment') || 
+        e.target.name.includes('credit_card') ||
+        e.target.type === 'radio' && e.target.checked
+      )) {
+        // Aguardar um pouco para garantir que dados foram preenchidos
+        setTimeout(() => {
+          if (!paymentInfoSent && isPaymentInfoComplete()) {
+            sendAddPaymentInfoEvent();
+            paymentInfoSent = true;
+          }
+        }, 500);
       }
     });
     
     // Também enviar quando submeter formulário de pagamento
     form.addEventListener('submit', function(e) {
-      sendAddPaymentInfoEvent();
+      if (!paymentInfoSent) {
+        sendAddPaymentInfoEvent();
+        paymentInfoSent = true;
+      }
     });
   });
+
+  // Função para verificar se informações de pagamento estão completas
+  function isPaymentInfoComplete() {
+    // Verificar se há método de pagamento selecionado
+    const paymentMethod = document.querySelector('input[name*="payment"]:checked');
+    if (!paymentMethod) return false;
+    
+    // Se for cartão de crédito, verificar campos obrigatórios
+    if (paymentMethod.value.includes('credit') || paymentMethod.value.includes('card')) {
+      const cardNumber = document.querySelector('input[name*="number"], input[name*="card"]');
+      const expiryDate = document.querySelector('input[name*="expiry"], input[name*="month"]');
+      const cvv = document.querySelector('input[name*="cvv"], input[name*="security"]');
+      
+      return cardNumber && cardNumber.value.length >= 15 && 
+             expiryDate && expiryDate.value && 
+             cvv && cvv.value.length >= 3;
+    }
+    
+    return true; // Para outros métodos (PayPal, etc.)
+  }
 
   function sendAddPaymentInfoEvent() {
     fetch('/cart.js')
@@ -631,12 +700,46 @@ console.log('Product data:', {{ product | json }});
 </script>
 ```
 
+#### **5. Problemas de Build TypeScript (RESOLVIDOS)**
+Se você estiver usando a API como base para seu projeto:
+```bash
+# Erro: Type '(string | undefined)[]' is not assignable to type 'string[]'
+# SOLUÇÃO: Use type guards específicos
+
+// ❌ Problemático:
+const categories = contents.map(item => item.category).filter(Boolean);
+
+// ✅ Correto:
+const categories: string[] = Array.from(new Set(
+  contents.map(item => item.category)
+    .filter((category: any): category is string => Boolean(category) && typeof category === 'string')
+));
+```
+
+#### **6. Problemas de Compatibilidade de Interfaces**
+```typescript
+// ❌ Problemático:
+interface ProductData {
+  contents: Product[];
+  value: number;
+}
+
+// ✅ Correto:
+interface ProductData {
+  [key: string]: unknown; // Index signature para compatibilidade
+  contents: Product[];
+  value: number;
+}
+```
+
 ### **Ferramentas de Debug:**
 
 1. **Facebook Events Manager** - Verificar se eventos chegam
 2. **Console do navegador** - Logs detalhados
 3. **Network tab** - Ver requests para API
 4. **Shopify admin** - Verificar configurações
+5. **TypeScript Compiler** - `npx tsc --noEmit` para verificar tipos
+6. **Build de Produção** - `npm run build` para testar compatibilidade
 
 ---
 
@@ -822,4 +925,125 @@ window.addEventListener('online', () => fbcapi.flushQueue());
 
 ---
 
-*Documentação atualizada em {{ "now" | date: "%d/%m/%Y" }}* 
+## 🚀 **ATUALIZAÇÕES E MELHORIAS**
+
+### **✅ Versão 2.0.0 - Implementações Recentes**
+
+#### **🆕 Novos Recursos:**
+- ✅ **AddPaymentInfo Event** - Tracking completo de informações de pagamento
+- ✅ **Validação TypeScript Robusta** - Correções de tipos e compatibilidade
+- ✅ **Zod Validation** - Validação runtime de dados
+- ✅ **Type Guards Otimizados** - Melhor inferência de tipos
+- ✅ **Build de Produção Estável** - Todas as correções aplicadas
+
+#### **🔧 Correções Técnicas:**
+```typescript
+// Correções implementadas para garantir build estável:
+
+// 1. Type Guards específicos para arrays
+const categories: string[] = Array.from(new Set(
+  contents.map(item => item.category)
+    .filter((category: any): category is string => Boolean(category) && typeof category === 'string')
+));
+
+// 2. Interfaces com Index Signatures para compatibilidade
+interface EcommerceData {
+  [key: string]: unknown; // Compatibilidade total
+  contents: CartItem[];
+  value: number;
+  currency: string;
+  // ...outros campos
+}
+
+// 3. Validação robusta com Zod
+import { z } from 'zod';
+const ProductSchema = z.object({
+  id: z.string().min(1),
+  quantity: z.number().positive(),
+  item_price: z.number().nonnegative()
+});
+```
+
+#### **📈 Melhorias de Performance:**
+- ⚡ **Build 100% Estável** - Zero erros TypeScript
+- ⚡ **Validação Otimizada** - Zod schemas para todos os eventos
+- ⚡ **Type Safety** - Compatibilidade total entre interfaces
+- ⚡ **Error Handling** - Tratamento robusto de erros
+
+#### **🎯 Eventos Implementados:**
+1. **PageView** - Visualização de páginas
+2. **ViewContent** - Visualização de produtos
+3. **AddToCart** - Adicionar ao carrinho
+4. **AddToWishlist** - Lista de desejos
+5. **InitiateCheckout** - Iniciar checkout
+6. **AddPaymentInfo** - 🆕 Informações de pagamento
+7. **Purchase** - Compra finalizada
+
+#### **🔐 Segurança e Qualidade:**
+- ✅ **PII Hashing** - SHA-256 para dados sensíveis
+- ✅ **CORS Configurado** - Segurança de origem
+- ✅ **Geolocation** - Enriquecimento via ipdata.co
+- ✅ **Event Deduplication** - IDs únicos para evitar duplicação
+- ✅ **Input Validation** - Validação completa de dados
+
+#### **📝 Próximas Implementações:**
+- 🔄 **Retry Logic** - Reenvio automático em caso de falha
+- 🔄 **Offline Support** - Queue de eventos offline
+- 🔄 **Analytics Dashboard** - Painel de métricas
+- 🔄 **A/B Testing** - Suporte para testes
+
+---
+
+### **💡 Dicas de Implementação Avançada:**
+
+#### **Debugging Avançado:**
+```javascript
+// Console debug detalhado
+window.FBCAPI.debug = {
+  showPayloads: true,
+  showResponses: true,
+  logErrors: true,
+  trackPerformance: true
+};
+
+// Exemplo de uso
+window.FBCAPI.sendEvent('AddPaymentInfo', paymentData)
+  .then(response => {
+    console.log('[SUCCESS]', response);
+  })
+  .catch(error => {
+    console.error('[ERROR]', error);
+    // Implementar retry logic aqui
+  });
+```
+
+#### **Performance Monitoring:**
+```javascript
+// Monitorar performance dos eventos
+const performanceTracker = {
+  start: Date.now(),
+  events: [],
+  
+  track: function(eventType, startTime) {
+    this.events.push({
+      type: eventType,
+      duration: Date.now() - startTime,
+      timestamp: new Date().toISOString()
+    });
+  }
+};
+```
+
+---
+
+**📞 Suporte Técnico:** Para questões específicas sobre as implementações, consulte os logs de debug e verifique a documentação de cada evento.
+
+**🔗 Links Úteis:**
+- [Shopify Theme Development](https://shopify.dev/themes)
+- [Facebook Events Manager](https://business.facebook.com/events_manager)
+- [TypeScript Documentation](https://www.typescriptlang.org/docs/)
+- [Zod Validation](https://zod.dev/)
+
+---
+
+*Documentação atualizada em {{ "now" | date: "%d/%m/%Y" }} - Versão 2.0.0* 
