@@ -32,6 +32,7 @@ const ALLOWED_ORIGIN = rawAllowedOrigin.endsWith('/') ? rawAllowedOrigin.slice(0
  */
 
 interface AddToCartProduct {
+  [key: string]: unknown;       // Index signature for compatibility
   id: string;                    // Product SKU/ID (required)
   quantity: number;              // Quantity being added (required)
   item_price: number;            // Unit price (required)
@@ -44,6 +45,7 @@ interface AddToCartProduct {
 }
 
 interface EcommerceAddToCartData {
+  [key: string]: unknown;       // Index signature for compatibility
   content_ids: string[];         // Product SKUs (required)
   content_name: string;          // Product name (required)
   content_type: 'product';       // Always 'product' for e-commerce

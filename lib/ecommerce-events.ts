@@ -48,7 +48,7 @@ export async function sendEcommerceViewContent(
     'ViewContent',
     request,
     userData,
-    productData as any, // Type assertion for compatibility
+    productData,
     eventSourceUrl,
     eventId,
     urlParameters
@@ -70,7 +70,7 @@ export async function sendEcommerceAddToCart(
     'AddToCart',
     request,
     userData,
-    cartData as any, // Type assertion for compatibility
+    cartData,
     eventSourceUrl,
     eventId,
     urlParameters
@@ -92,7 +92,7 @@ export async function sendEcommerceInitiateCheckout(
     'InitiateCheckout',
     request,
     userData,
-    checkoutData as any, // Type assertion for compatibility
+    checkoutData,
     eventSourceUrl,
     eventId,
     urlParameters
@@ -114,7 +114,7 @@ export async function sendEcommerceAddToWishlist(
     'AddToWishlist',
     request,
     userData,
-    wishlistData as any, // Type assertion for compatibility
+    wishlistData,
     eventSourceUrl,
     eventId,
     urlParameters
@@ -136,7 +136,7 @@ export async function sendEcommercePurchase(
     'Purchase',
     request,
     userData,
-    purchaseData as any, // Type assertion for compatibility
+    purchaseData,
     eventSourceUrl,
     eventId,
     urlParameters

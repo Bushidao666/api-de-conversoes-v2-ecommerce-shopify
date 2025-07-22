@@ -478,8 +478,14 @@ export function validateEcommerceData<T>(
 export function calculateProductSummary(contents: BaseProduct[]): ProductSummary {
   const totalValue = contents.reduce((sum, item) => sum + (item.item_price * item.quantity), 0);
   const totalQuantity = contents.reduce((sum, item) => sum + item.quantity, 0);
-  const categories = Array.from(new Set(contents.map(item => item.category).filter(Boolean)));
-  const brands = Array.from(new Set(contents.map(item => item.brand).filter(Boolean)));
+  
+  // Type-safe filtering with explicit type guards to ensure string[] result
+  const categories = Array.from(new Set(
+    contents.map(item => item.category).filter((category): category is string => Boolean(category))
+  ));
+  const brands = Array.from(new Set(
+    contents.map(item => item.brand).filter((brand): brand is string => Boolean(brand))
+  ));
   
   return {
     totalValue,

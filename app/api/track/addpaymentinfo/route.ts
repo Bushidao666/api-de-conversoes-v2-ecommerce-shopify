@@ -3,6 +3,7 @@ import { sendServerEvent, type UserData } from '../../../../lib/fbevents';
 
 // Interface para itens no carrinho durante AddPaymentInfo
 interface PaymentCartItem {
+  [key: string]: unknown; // Index signature for compatibility
   id: string;
   quantity: number;
   item_price: number;
@@ -16,6 +17,7 @@ interface PaymentCartItem {
 
 // Interface principal para dados do evento AddPaymentInfo
 interface EcommerceAddPaymentInfoData {
+  [key: string]: unknown; // Index signature for compatibility
   // Dados obrigatórios
   contents: PaymentCartItem[];
   value: number;
@@ -358,7 +360,7 @@ export async function POST(request: NextRequest) {
         message: 'Evento AddPaymentInfo enviado com sucesso',
         eventId: event_id,
         paymentSummary: paymentSummary,
-        facebook_response: result.response
+        facebook_response: result.success && 'fbtrace_id' in result ? { fbtrace_id: result.fbtrace_id } : null
       });
     } else {
       console.error('[AddPaymentInfo] ❌ Erro ao enviar para Facebook:', result.error);

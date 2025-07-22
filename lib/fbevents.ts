@@ -20,6 +20,7 @@ export interface UserData {
 
 export interface CustomData {
   [key: string]: unknown;
+  // Basic Facebook CAPI fields
   value?: number;
   currency?: string;
   content_name?: string;
@@ -29,11 +30,56 @@ export interface CustomData {
     id: string;
     quantity: number;
     item_price?: number;
+    [key: string]: unknown; // Allow additional properties
   }>;
   num_items?: number;
   order_id?: string;
   search_string?: string;
   status?: string;
+  content_type?: string;
+  
+  // E-commerce specific fields
+  brand?: string;
+  availability?: string;
+  condition?: string;
+  payment_method?: string;
+  payment_type?: string;
+  installments?: number;
+  shipping_cost?: number;
+  tax_amount?: number;
+  discount_amount?: number;
+  subtotal?: number;
+  order_total?: number;
+  delivery_category?: string;
+  shipping_method?: string;
+  estimated_delivery_date?: string;
+  checkout_step?: number;
+  checkout_id?: string;
+  cart_id?: string;
+  coupon_code?: string;
+  coupon_codes?: string[];
+  customer_type?: string;
+  predicted_ltv?: number;
+  payment_source?: string;
+  device_type?: string;
+  risk_score?: number;
+  fraud_check_passed?: boolean;
+  wishlist_name?: string;
+  wishlist_type?: string;
+  wishlist_id?: string;
+  recommendation_source?: string;
+  user_intent?: string;
+  payment_status?: string;
+  discount_type?: string;
+  subscription_id?: string;
+  campaign_id?: string;
+  affiliate_id?: string;
+  referrer_source?: string;
+  product_group_id?: string;
+  custom_label_0?: string;
+  variant_id?: string;
+  variant_name?: string;
+  sku?: string;
 }
 
 export interface ServerEvent {

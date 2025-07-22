@@ -27,6 +27,7 @@ const ALLOWED_ORIGIN = rawAllowedOrigin.endsWith('/') ? rawAllowedOrigin.slice(0
  */
 
 interface EcommerceViewContentData {
+  [key: string]: unknown;         // Index signature for compatibility
   content_ids: string[];           // Product SKUs/IDs (required)
   content_name: string;            // Product name (required)
   content_type: 'product';         // Always 'product' for e-commerce
@@ -37,6 +38,7 @@ interface EcommerceViewContentData {
   availability?: 'in stock' | 'out of stock' | 'preorder' | 'available for order' | 'discontinued';
   condition?: 'new' | 'refurbished' | 'used';
   contents?: Array<{              // Detailed product info
+    [key: string]: unknown;      // Index signature for compatibility
     id: string;
     quantity: number;
     item_price: number;

@@ -36,6 +36,7 @@ const ALLOWED_ORIGIN = rawAllowedOrigin.endsWith('/') ? rawAllowedOrigin.slice(0
  */
 
 interface PurchasedProduct {
+  [key: string]: unknown;       // Index signature for compatibility
   id: string;                    // Product SKU/ID (required)
   quantity: number;              // Quantity purchased (required)
   item_price: number;            // Unit price after discounts (required)
@@ -51,6 +52,7 @@ interface PurchasedProduct {
 }
 
 interface EcommercePurchaseData {
+  [key: string]: unknown;       // Index signature for compatibility
   // Core purchase fields (required)
   order_id: string;              // Unique order ID (required)
   value: number;                 // Total purchase value after discounts (required)
@@ -248,9 +250,13 @@ function validateEcommercePurchaseData(data: any): {
     return { isValid: false, errors };
   }
 
-  // Extract categories and brands for summary
-  const categories = Array.from(new Set(data.contents.map((item: any) => item.category).filter(Boolean)));
-  const brands = Array.from(new Set(data.contents.map((item: any) => item.brand).filter(Boolean)));
+  // Extract categories and brands for summary with type-safe filtering
+  const categories: string[] = Array.from(new Set(
+    data.contents.map((item: any) => item.category).filter((category: any): category is string => Boolean(category) && typeof category === 'string')
+  ));
+  const brands: string[] = Array.from(new Set(
+    data.contents.map((item: any) => item.brand).filter((brand: any): brand is string => Boolean(brand) && typeof brand === 'string')
+  ));
 
   // Generate content_ids and content_name if not provided
   const contentIds = data.content_ids || data.contents.map((item: any) => item.id);

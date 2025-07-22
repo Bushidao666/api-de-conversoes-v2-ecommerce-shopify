@@ -31,6 +31,7 @@ const ALLOWED_ORIGIN = rawAllowedOrigin.endsWith('/') ? rawAllowedOrigin.slice(0
  */
 
 interface WishlistProduct {
+  [key: string]: unknown;       // Index signature for compatibility
   id: string;                    // Product SKU/ID (required)
   quantity: number;              // Quantity being added (default: 1)
   item_price: number;            // Unit price (required)
@@ -45,6 +46,7 @@ interface WishlistProduct {
 }
 
 interface EcommerceAddToWishlistData {
+  [key: string]: unknown;       // Index signature for compatibility
   content_ids: string[];         // Product SKUs (required)
   content_name: string;          // Primary product name or description (required)
   content_type: 'product';       // Always 'product' for e-commerce
@@ -193,9 +195,13 @@ function validateEcommerceAddToWishlistData(data: any): {
     return { isValid: false, errors };
   }
 
-  // Extract categories and brands for summary
-  const categories = [...new Set(data.contents.map((item: any) => item.category).filter(Boolean))];
-  const brands = [...new Set(data.contents.map((item: any) => item.brand).filter(Boolean))];
+  // Extract categories and brands for summary with type-safe filtering
+  const categories: string[] = Array.from(new Set(
+    data.contents.map((item: any) => item.category).filter((category: any): category is string => Boolean(category) && typeof category === 'string')
+  ));
+  const brands: string[] = Array.from(new Set(
+    data.contents.map((item: any) => item.brand).filter((brand: any): brand is string => Boolean(brand) && typeof brand === 'string')
+  ));
 
   // Sanitize and structure data for Facebook CAPI
   const sanitizedData: EcommerceAddToWishlistData = {
